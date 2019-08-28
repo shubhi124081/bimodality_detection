@@ -1,0 +1,1832 @@
+---
+title: "changeDetection"
+author: "Shubhi Sharma"
+date: "7/11/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+
+.libPaths("~/Documents/R")
+setwd("~/Documents/R/Independent_study")
+
+source("function_mclust.R")
+
+require(reshape2)
+require(dplyr)
+require(mclust)
+require(ggplot2)
+require(gridExtra)
+require(grid)
+require(ggthemes)
+require(lattice)
+require(viridis)
+require(svMisc)
+require(tikzDevice)
+```
+
+#Graphical illustration for bimodality detection 
+
+```{r illustrative plot for bimodality detection}
+
+set.seed(124)
+
+i1 <- c(10, 10); i2 <- c(10, 12); i3 <- c(10, 15); i4 <- c(10, 20); i5 <- c(10, 25); i6 <- c(10, 30); i7 <- c(10, 35); i8 <- c(10, 40) 
+i9 <- c(10, 45); i10 <- c(10, 50)
+
+sds <- c(7, 7)
+
+ind <- sample(1:2, 1000, replace = T, prob = c(0.5, 0.5))
+
+mean.df <- data.frame(cbind(m1 = rnorm(1000, mean = i1[ind], sd = sds[ind]),
+                            m2 = rnorm(1000, mean = i2[ind], sd = sds[ind]),
+                            m3 = rnorm(1000, mean = i3[ind], sd = sds[ind]),
+                            m4 = rnorm(1000, mean = i4[ind], sd = sds[ind]),
+                            m5 = rnorm(1000, mean = i5[ind], sd = sds[ind]),
+                            m6 = rnorm(1000, mean = i6[ind], sd = sds[ind]), 
+                            m7 = rnorm(1000, mean = i7[ind], sd = sds[ind]), 
+                            m8 = rnorm(1000, mean = i8[ind], sd = sds[ind]), 
+                            m9 = rnorm(1000, mean = i9[ind], sd = sds[ind]), 
+                            m10 = rnorm(1000, mean = i10[ind], sd = sds[ind])))
+
+p1 <- ggplot(mean.df, aes(x = m1)) + geom_density(color="darkblue", fill="lightblue") + xlim(c(-30, 80)) + xlab("Case 0: Difference = 0cm") + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ")
+p2 <- ggplot(mean.df, aes(x = m2)) + geom_density(color="darkblue", fill="lightblue") + xlim(c(-30, 80)) + xlab("Case 1: Difference = 2cm") + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ")
+p3 <- ggplot(mean.df, aes(x = m3)) + geom_density(color="darkblue", fill="lightblue")+  xlim(c(-30, 80)) + xlab("Case 2: Difference = 5cm") + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab("p(x)")
+p4 <- ggplot(mean.df, aes(x = m4)) + geom_density(color="darkblue", fill="lightblue")+ xlim(c(-30, 80)) + xlab("Case 3: Difference = 10cm") +theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ")
+p5 <- ggplot(mean.df, aes(x = m5)) + geom_density(color="darkblue", fill="lightblue")+ xlim(c(-30, 80)) + xlab("Case 4: Difference = 15cm") + theme(axis.text.y = element_blank(), axis.ticks = element_blank()) + ylab(" ")
+p6 <- ggplot(mean.df, aes(x = m6)) + geom_density(color="darkblue", fill="lightblue")+ xlim(c(-30, 80)) + xlab("Case 5: Difference = 20cm") + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ")
+p7 <- ggplot(mean.df, aes(x = m7)) + geom_density(color="darkblue",
+fill="lightblue")+ xlim(c(-30, 80)) + xlab("Case 6: Difference = 25cm") + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ")
+p8 <- ggplot(mean.df, aes(x = m8)) + geom_density(color="darkblue", fill="lightblue")+ xlim(c(-30, 80)) + xlab("Case 7: Difference = 30cm") + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ")
+p9 <- ggplot(mean.df, aes(x = m9)) + geom_density(color="darkblue", fill="lightblue")+ xlim(c(-30, 80)) + xlab("Case 8: Difference = 35cm") + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ")
+p10 <- ggplot(mean.df, aes(x = m10)) + geom_density(color="darkblue",
+fill="lightblue")+ xlim(c(-30, 80)) + xlab("Case 9: Difference = 40cm") + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ")
+
+
+grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, ncol = 2, nrow = 5, layout_matrix= cbind(c(1, 2, 3, 4, 5), c(6, 7, 8, 9, 10)))
+
+
+```
+
+# Simulating raw dataset 
+
+```{r data simulation}
+m1 <- c(10, 12, 15, 20, 25, 30,35,40, 45, 50)
+m2 <- rep(10, length(m1))
+smp.error <- c(0, 2, 5, 10)
+sd.m1 <- rep(7, length(m1))
+sd.m2 <- rep(7, length(m2))
+we.m1 <- rep(0.5, length(m1))
+we.m2 <- 1 - we.m1
+
+nm <- as.character(abs(m1 - m2))
+n = 1000
+all.data <- array(dim = list(length(smp.error), nrow = n, ncol = length(m1)))
+
+for(i in 1:length(smp.error)){
+  
+  all.data[i, , ] <- generate_rm(smp_error = smp.error[i], mean_vector1 =  m1, mean_vector2 = m2, sd_vector1 = sd.m1, sd_vector2 = sd.m2, weight1 = we.m1,
+                                 weight2 = we.m2, colnm  = nm, n_samples = n)
+}
+
+
+```
+
+
+#Proportion matrix
+
+```{r proportions}
+
+n.samples <- c(10, seq(25, 250, by = 25))
+count <- 0
+p.matrix <- array(NA, dim = list(length(smp.error), nrow = length(n.samples), ncol = length(m1)))
+pb <- txtProgressBar(max = 100)
+
+for(i in 1:length(smp.error)){
+  # print(paste0("Sample error = ", smp.error[i]))
+  
+  for(j in 1:length(n.samples)){
+    # print(paste0("No. of samples = ", n.samples[j]))
+    
+    for(k in 1:length(m1)){
+      # print(paste0("Mean = ", m1[k]))
+      count <- count + 1
+      setTxtProgressBar(pb, value = (count/ (length(smp.error) * length(n.samples) * length(m1)))*100)
+    p.matrix[i, j, k] <- proportion.fun(nsamples = n.samples[j], d1 = all.data[i, , k], niter = 500 )
+    }
+  }
+  
+}
+
+#line plot for 0 error 
+
+p0 <- p.matrix[1, , ]
+colnames(p0) <- (m1 - m2)
+rownames(p0) <- n.samples
+
+p0.m <- melt(p0)
+colnames(p0.m) <- c("Samples", "Effect Size", "Success Rate")
+start <- data.frame(cbind(rep(0, 11), unique(p0.m$`Effect Size`), rep(0, 11) ))
+colnames(start) <- c("Samples","Effect Size", "Success Rate")
+p0.m <- rbind(p0.m, start)
+
+l.0 <- ggplot(p0.m, aes(x = p0.m$Samples,y = p0.m$`Success Rate`, color = factor(p0.m$`Effect Size`)))+
+  geom_line() + theme_bw() + ggtitle("0cm error") + labs(color = "Effect Size")
+
+linePlotLegend <- get_legend(l.0)
+
+l.0 <- ggplot(p0.m, aes(x = p0.m$Samples,y = p0.m$`Success Rate`, color = factor(p0.m$`Effect Size`)))+
+  geom_line() + theme_bw() + labs(tag = "A") + theme(legend.position = "none") + xlab("Sample size") + ylab("Proportion") 
+
+#line plot for 2cm error 
+
+p2 <- p.matrix[2, , ]
+colnames(p2) <- (m1 - m2)
+rownames(p2) <- n.samples
+
+p2.m <- melt(p2)
+colnames(p2.m) <- c("Samples", "Effect Size", "Success Rate")
+
+p2.m <- rbind(p2.m, start)
+
+l.2 <- ggplot(p2.m, aes(x = p2.m$Samples,y = p2.m$`Success Rate`, color = factor(p2.m$`Effect Size`)))+
+  geom_line() + theme_bw()  + theme(legend.position = "None") + labs(tag = "B")+ xlab("Sample size") + ylab("Proportion") 
+
+
+#line plot for 5cm error 
+
+p5 <- p.matrix[3, , ]
+colnames(p5) <- (m1 - m2)
+rownames(p5) <- n.samples
+
+p5.m <- melt(p5)
+colnames(p5.m) <- c("Samples", "Effect Size", "Success Rate")
+
+p5.m <- rbind(p5.m, start)
+
+l.5 <- ggplot(p5.m, aes(x = p5.m$Samples,y = p5.m$`Success Rate`, color = factor(p5.m$`Effect Size`)))+
+  geom_line() + theme_bw()  + theme(legend.position = "None") + labs(tag= "C")+ xlab("Sample size") + ylab("Proportion") 
+
+
+
+#line plot for 10cm error
+
+p10 <- p.matrix[4, , ]
+colnames(p10) <- (m1 - m2)
+rownames(p10) <- n.samples
+
+p10.m <- melt(p10)
+colnames(p10.m) <- c("Samples", "Effect Size", "Success Rate")
+
+p10.m <- rbind(p10.m, start)
+
+l.10 <- ggplot(p10.m, aes(x = p10.m$Samples,y = p10.m$`Success Rate`, color = factor(p10.m$`Effect Size`)))+
+  geom_line() + theme_bw() + theme(legend.position = "None") + labs(tag = "D") + xlab("Sample size") + ylab("Proportion") 
+
+
+#grid arrange line plot 
+tikz("linePlotAllEProp.tex")
+grid.arrange(l.0, l.2, l.5, l.10, linePlotLegend, ncol=3, nrow = 2, layout_matrix= cbind(c(1, 2), c(3, 4), c(5, 5)), widths = c(2.5, 2.5, 0.8))
+dev.off()
+
+```
+
+
+#Approximating mean with 0cm, 2cm, 5cm & 10cm error
+
+```{r mean approx 0 error}
+
+n.samples <- c(10, seq(25, 250, by = 25))
+S = 1000
+
+c.mean <- array(dim = c(length(smp.error), length(n.samples), length(m1), S,  2))
+pb <- txtProgressBar(max = 100)
+count <- 0
+
+for(i in 1:length(smp.error)){
+  # print(paste("Error = ", smp.error[i]))
+  for(k in 1:length(n.samples)){
+    # print(paste("Samples =", n.samples[k]))
+  for(j in 1:length(m1)){
+    count <- count + 1
+    # print(paste("Mean = ", m1[j]))
+    setTxtProgressBar(pb, value = (count/(length(smp.error)*length(n.samples)*length(m1)))*100)
+    
+    c.mean[i, k, j, , ] <- mean.approx.fun(n.samples[k], all.data[i, ,j ], n.iter = S)
+  }
+}
+}
+
+#0 error
+
+mean.approx.e0 <- c.mean[1, , , ,] #first subset is n.samples
+#second subset is difference 
+#third is 100 x 2 dataframe
+# c(length(n.samples), length(nm), 200, 1)
+reformat.df <- function(error.m, dim.m1, samplesize){
+tmp <- array( dim = dim.m1)
+
+for(i in 1:dim.m1[1]){
+  for(j in 1:dim.m1[2]){
+    
+    tmp[i, j, , 1] <- c((error.m[i, j, ,1] - m1[j]), 
+                              (error.m[i, j, , 2]- m2[j]))
+  }
+}
+n.samples = c(10, seq(25, 250, by = 25))
+e <- which(n.samples == (samplesize))
+
+t <- t(unlist(tmp[e, , ,]))
+t <- scale(t)
+colnames(t) <- nm
+
+melt.t <- melt(t)
+melt.t <- melt.t[, -which(names(melt.t) == "Var1")]
+melt.t$Samples <- c(rep(samplesize, nrow(melt.t)))
+
+colnames(melt.t) <- c("Difference", "Precision", "Samples")
+
+return(melt.t)
+
+}
+
+
+mean.s <- list()
+
+for(i in 1:length(n.samples)){
+  
+  
+  mean.s[[i]] <- reformat.df(error.m = mean.approx.e0, dim.m1 = c(length(n.samples), length(nm), 2000, 1), samplesize = n.samples[i])
+  
+  
+}
+mean.e0.all <- do.call(rbind, mean.s)
+
+#plot
+
+# jpeg(filename = paste0(getwd(), "/Figures/15Jul/SamplesPrecisionE0Boxplot.jpg"))
+ggplot(data = mean.e0.all, aes(x = as.factor(Difference), y = Precision, colour = as.factor(Samples) )) + geom_boxplot(outlier.shape = NA) + ggtitle("0cm error")
+# dev.off()
+
+
+
+#counting all NAs
+mean.e0.all$Count <- ifelse(is.na(mean.e0.all$Precision), 1, NA)
+mean.na <- mean.e0.all[which(is.na(mean.e0.all$Precision)), ]
+
+difference.e0 <- aggregate(Count ~ Difference, data = mean.na, sum)
+difference.e0$Proportion <- (difference.e0$Count/22000)*100
+#22000 is number of iterations per difference 
+
+# jpeg(filename = paste0(getwd(), "/Figures/15Jul/NonDetectionE0.jpg"))
+plot(difference.e0$Difference, difference.e0$Count, type = "o", ylab = "Count of non-detection", xlab = "Difference in means")
+# dev.off()
+
+
+#2cm error
+
+mean.approx.e2 <- c.mean[2, , , , ]
+
+mean.s <- list()
+
+for(i in 1:length(n.samples)){
+  
+  
+  mean.s[[i]] <- reformat.df(error.m = mean.approx.e2, dim.m1 = c(length(n.samples), length(nm), 2000, 1), samplesize = n.samples[i])
+  
+  
+}
+mean.e2.all <- do.call(rbind, mean.s)
+
+#plot
+ggplot(data = mean.e2.all, aes(x = as.factor(Samples), y = Precision, colour = as.factor(Difference))) + geom_boxplot() + ggtitle("0cm error")
+
+#counting all NAs
+mean.e2.all$Count <- ifelse(is.na(mean.e2.all$Precision), 1, NA)
+mean.na.e2 <- mean.e2.all[which(is.na(mean.e2.all$Precision)), ]
+
+difference.e2 <- aggregate(Count ~ Difference, data = mean.na.e2, sum)
+difference.e2$Proportion <- (difference.e2$Count/22000)*100
+#22000 is number of iterations per difference 
+
+plot(difference.e2$Difference, difference.e2$Count, type = "o", ylab = "Count of non-detection", xlab = "Difference in means")
+
+
+#5cm error
+
+
+mean.approx.e5 <- c.mean[3, , , , ]
+
+mean.s <- list()
+
+for(i in 1:length(n.samples)){
+  
+  
+  mean.s[[i]] <- reformat.df(error.m = mean.approx.e5, dim.m1 = c(length(n.samples), length(nm), 2000, 1), samplesize = n.samples[i])
+  
+  
+}
+mean.e5.all <- do.call(rbind, mean.s)
+
+#plot
+ggplot(data = mean.e5.all, aes(x = as.factor(Samples), y = Precision, colour = as.factor(Difference))) + geom_boxplot() + ggtitle("0cm error")
+
+#counting all NAs
+mean.e5.all$Count <- ifelse(is.na(mean.e5.all$Precision), 1, NA)
+mean.na.e5 <- mean.e5.all[which(is.na(mean.e5.all$Precision)), ]
+
+difference.e5 <- aggregate(Count ~ Difference, data = mean.na.e5, sum)
+difference.e5$Proportion <- (difference.e5$Count/22000)*100 
+#22000 is number of iterations per difference 
+
+plot(difference.e5$Difference, difference.e5$Count, type = "o", ylab = "Count of non-detection", xlab = "Difference in means")
+
+#10cm error 
+mean.approx.e10 <- c.mean[4, , , , ]
+
+mean.s <- list()
+
+for(i in 1:length(n.samples)){
+  
+  
+  mean.s[[i]] <- reformat.df(error.m = mean.approx.e10, dim.m1 = c(length(n.samples), length(nm), 2000, 1), samplesize = n.samples[i])
+  
+  
+}
+mean.e10.all <- do.call(rbind, mean.s)
+
+#plot
+ggplot(data = mean.e10.all, aes(x = as.factor(Samples), y = Precision, colour = as.factor(Difference))) + geom_boxplot() + ggtitle("0cm error")
+
+#counting all NAs
+mean.e10.all$Count <- ifelse(is.na(mean.e10.all$Precision), 1, NA)
+mean.na.e10 <- mean.e10.all[which(is.na(mean.e10.all$Precision)), ]
+
+difference.e10 <- aggregate(Count ~ Difference, data = mean.na.e10, sum)
+difference.e10$Proportion <- (difference.e10$Count/22000)*100 
+#22000 is number of iterations per difference 
+
+
+plot(difference.e10$Difference, difference.e10$Count, type = "o", ylab = "Count of non-detection", xlab = "Difference in means")
+
+```
+
+#Supplmentary plot for mean approximation 
+
+```{r}
+
+#dimensions of c.mean
+#1= smple error; 2= no. samples; 3= m1; 4= S; 5= 2
+g <- list()
+for(i in 1:length(m1)){
+tmp<- mean.approx.e0[5, i, ,  ]
+
+tmp2 <- as.data.frame(c(tmp[, 1], tmp[, 2]))
+tmp2$Var <- rep(c("mean1", "mean2"), each = 1000)
+tmp2$True <- rep(c(m1[1], m2[1]), each = 1000)
+colnames(tmp2) <- c("Value", "Var", "True")
+
+g[[i]] <- ggplot(tmp2, aes(x = as.factor(`Var`), y = `Value`, color = as.factor(`Var`))) + geom_point() + geom_point(aes(x = as.factor(`Var`), y = `True`, color = "true")) + ylim(c(-30, 50)) + ggtitle(paste0("Difference = ", abs(m1 - m2)[i]))
+}
+
+
+```
+
+
+#Dual y axis plot
+
+
+```{r dual y axis plot}
+
+################ UNDER CONSTRUCTION #################
+
+#Dual y-axis plot 
+
+CIfn <- function(data){
+  
+  mean <- mean(data, na.rm = T)
+  sd <- sd(data, na.rm = T )
+  n <- length(data)
+  
+ e <- qnorm(0.975)*sd/sqrt(n)
+ 
+ lowCI <- mean - e
+ highCI <- mean + e
+ 
+ CI <- as.data.frame(cbind(mean, sd, lowCI, highCI))
+ colnames(CI) <- c("Mean", "SD", "LowCI", "HighCI")
+ 
+ return(CI)
+  
+}
+
+dualM <- list() 
+difference <- unique(mean.e0.all$Difference)
+samples <- unique(mean.e0.all$Samples)
+count <- 0
+for(i in 1:length(difference)){
+  for(j in 1:length(samples)){
+    count <- count + 1
+dualM[[count]]<- CIfn(data = mean.e0.all$Precision[mean.e0.all$Difference == difference[i] & mean.e0.all$Samples == samples[j]])
+  }
+}
+
+mean0E <- do.call(rbind, dualM)
+mean0E$Difference <- rep(as.factor(difference), 11)
+mean0E$Samples <- rep(as.factor(samples), 10)
+
+g0 <- ggplot(mean0E[mean0E$Samples == 10, ], aes(x = as.factor(`Samples`), y = (`Mean`), color = as.factor(`Difference`))) + geom_point() +geom_errorbar(aes(ymax = (`HighCI`), ymin = (`LowCI`))) 
+
+
+
+#######THIS PART WORKS #########
+
+ library(gridExtra)
+get_legend<-function(myggplot){
+     tmp <- ggplot_gtable(ggplot_build(myggplot))
+     leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+     legend <- tmp$grobs[[leg]]
+     return(legend)
+ }
+
+
+#Taking the dataframes from pervious section 
+
+#function for boxplot 
+
+dualAxesPlot <- function(meanApproxData, nonDetectData, legend = FALSE, tag){
+  
+  if(legend == TRUE){
+plot <-   ggplot() + geom_boxplot(data =meanApproxData, aes(x =as.factor(Difference), y = Precision, fill= as.factor(Samples)), alpha = 7/10, outlier.color = "grey") + labs(tag = tag) + geom_path(data= nonDetectData, aes(x = as.factor(Difference), y = (Proportion)/10, group=1), color = "black") + geom_point(data = nonDetectData, aes(x = as.factor(Difference), y = (Proportion)/10, color = "%"), group=1, colour = "black") + theme_bw() + scale_y_continuous(sec.axis = sec_axis(~.*10, name = "Prop of iterations with undetected bimodality"), limits = c(-5, 7))   +xlab("Difference in means (cm)") + ylab("Error in mean approximation (cm)") + labs(fill = "Sample size")  + scale_fill_viridis(discrete = TRUE, option = "D")
+  }
+  
+  if(legend == FALSE){
+  plot <-   ggplot() + geom_boxplot(data =meanApproxData, aes(x =as.factor(Difference), y = Precision, fill= as.factor(Samples), alpha = 9/10),  outlier.color = "grey") + labs(tag = tag) + geom_path(data= nonDetectData, aes(x = as.factor(Difference), y = (Proportion)/10, group=1), color = "black") + geom_point(data =nonDetectData, aes(x = as.factor(Difference), y = (Proportion)/10, color = "%"), group=1, colour = "black") + theme_bw() + scale_y_continuous(sec.axis = sec_axis(~.*10, name = "Prop of iterations with undetected bimodality"), limits = c(-5, 7))   +xlab("Difference in means (cm)") + ylab("Error in mean approximation (cm)") + labs(fill = "Sample size")  + scale_fill_viridis(discrete = TRUE, option = "D") + theme(legend.position = "none")
+  }
+  
+#other colour scheme options
+# + scale_fill_brewer(palette = "Dark2")
+# + scale_fill_brewer(palette = "Set3")
+
+
+  
+  return(plot)
+}
+
+#zero error 
+
+p0 <- dualAxesPlot(meanApproxData = mean.e0.all, nonDetectData = difference.e0, legend = TRUE, tag = "A")
+
+dualLegend <- get_legend(p0)
+p0 <-dualAxesPlot(meanApproxData = mean.e0.all, nonDetectData = difference.e0, legend = FALSE, tag = "A")
+
+#2cm error 
+
+p2 <- dualAxesPlot(meanApproxData = mean.e2.all, nonDetectData = difference.e2, legend = TRUE, tag = "B")
+# + scale_fill_brewer(palette = "Set3")
+
+#5cm error
+
+p5 <- dualAxesPlot(meanApproxData = mean.e5.all, nonDetectData = difference.e5, legend = TRUE, tag = "C")
+
+#10cm error 
+
+p10 <- dualAxesPlot(meanApproxData = mean.e10.all, nonDetectData = difference.e10, legend = TRUE, tag = "D")
+
+
+# grid.arrange(p0, p2, dualLegend, p5, p10, ncol = 3, nrow = 2, layout_matrix = cbind(c(1, 2), c( 4, 5), c(3, 3)),  widths = c(2.5, 2.5, 0.8))
+
+
+tikz("meanApprox.tex")
+grid.arrange( p0,p2,p5, p10, dualLegend, ncol = 3, nrow =2, layout_matrix = cbind(c(1, 2), c(3, 4), c(5, 5)), widths = c(2,2,0.6))
+dev.off()
+
+
+tikz("meanApproxE0.tex")
+p0
+dev.off()
+
+tikz("meanApproxE2.tex")
+p2
+dev.off()
+
+tikz("meanApproxE5.tex")
+p5
+dev.off()
+
+tikz("meanApproxE10.tex")
+p10
+dev.off()
+
+```
+
+
+
+
+#non-independence scatter plots
+
+```{r non-independece plots}
+
+#for sd = 100 -----
+n.samples <- c(10, seq(25, 250, by = 25))
+p.matrix.0.niid <- array(dim = c(length(smp.error), length(n.samples), length(m1)))
+pb <- txtProgressBar(min = 0, max = 100, style = 1)
+count <- 0
+for(i in 1 :length(smp.error)){
+  # print(paste0("Error = ", smp.error[i]))
+for(l in 1: length(n.samples)){
+   # print(paste0("Samples = ", n.samples[l]))
+  for(j in 1:length(m1)){
+    count <- count + 1
+     setTxtProgressBar(pb, value = (count/(1*length(n.samples)*length(m1)))*100)
+      # print(paste0("Effect size = ", m1[j]))
+    tmp <- prop.fun.niid(nsamples = n.samples[l], dist = all.data[i, ,j], stand.dev= 100)
+    p.matrix.0.niid[i, l,j ] <- tmp
+  }
+}
+   
+}
+
+#for sd = 50 -----
+# 
+# n.samples <- c(10, seq(25, 250, by = 25))
+# p.matrix.0.niid2 <- array(dim = c(length(smp.error), length(n.samples), length(m1)))
+# pb <- txtProgressBar(min = 0, max = 100, style = 1)
+# count <- 0
+# for(i in 1 :length(smp.error)){
+#    # print(paste0("Error = ", smp.error[i]))
+# for(l in 1: length(n.samples)){
+#     # print(paste0("Samples = ", n.samples[l]))
+#   for(j in 1:length(m1)){
+#     count <- count + 1
+#      # print(paste0("Effect size = ", m1[j]))
+#     tmp <- prop.fun.niid(nsamples = n.samples[i], dist = all.data[i, ,j], stand.dev= 50)
+#     p.matrix.0.niid2[i, l,j ] <- tmp
+#     setTxtProgressBar(pb, value= (count/(length(smp.error)*length(n.samples)*length(m1)))*100)
+#   }
+# }
+#   
+# }
+
+#for sd = 200 -----
+ 
+n.samples <- c(10, seq(25, 250, by = 25))
+p.matrix.0.nniid <- array(dim = c(length(smp.error), length(n.samples), length(m1)))
+ pb <- txtProgressBar(min = 0, max = 100, style = 1)
+ count <- 0
+ for(i in 1 :length(smp.error)){
+    # print(paste0("Error = ", smp.error[i]))
+ for(l in 1: length(n.samples)){
+     # print(paste0("Samples = ", n.samples[l]))
+   for(j in 1:length(m1)){
+      # print(paste0("Effect size = ", m1[j]))
+     tmp <- prop.fun.niid(nsamples = n.samples[i], dist = all.data[i, ,j], stand.dev= 200)
+     p.matrix.0.nniid[i, l,j ] <- tmp
+     count <- count + 1
+     setTxtProgressBar(pb, value = (count/(length(smp.error)*length(n.samples)*length(m1)))*100)
+   }
+ }
+   setTxtProgressBar(pb, i)
+ }
+```
+
+
+
+#illustrative figure for non-independence 
+
+```{r illustrative figure for non-independence}
+
+set.seed(124)
+iid <- all.data[1, , 10][1:900]
+niid1 <- generate.niid(1000, all.data[1, , 10], stand.dev = 50)[1:900]
+niid2 <- generate.niid(1000, all.data[1, , 10], stand.dev = 100)[1:900]
+niid3 <- generate.niid(1000, all.data[1, , 10], stand.dev = 200)[1:900]
+ind.df <- data.frame(cbind(ind = iid , 
+                            nonind1 = niid1, 
+                            nonind2 = niid2, 
+                            nonind3 = niid3))
+
+p1 <- ggplot(ind.df, aes(x = ind)) + geom_density(color="darkblue", fill="lightblue")
+p2 <- ggplot(ind.df, aes(x = nonind1)) + geom_density(color="darkblue", fill="lightblue")
+p3 <- ggplot(ind.df, aes(x = nonind2)) + geom_density(color="darkblue", fill="lightblue")
+p4 <- ggplot(ind.df, aes(x = nonind3)) + geom_density(color="darkblue", fill="lightblue")
+
+
+grid.arrange(p1, p2, p3, p4)
+
+
+
+
+```
+
+
+```{r plots for niid}
+#plots for non-independence runs 
+
+#No error for N1
+
+niid.e0 <- p.matrix.0.niid[1, , ]
+colnames(niid.e0) <- abs(m1 -m2) 
+rownames(niid.e0) <- n.samples
+
+melt.niid.e0 <- melt(niid.e0)
+colnames(melt.niid.e0) <- c("Samples", "Effect size", "Successful detection rate")
+start <- data.frame(cbind(rep(0, length(unique(melt.niid.e0$`Effect size`))), unique(melt.niid.e0$`Effect size`), rep(0, length(unique(melt.niid.e0$`Effect size`)))))
+colnames(start) <- c("Samples", "Effect size", "Successful detection rate")
+melt.niid.e0 <- rbind(melt.niid.e0, start)
+
+g.niid <- ggplot(melt.niid.e0, aes(x = Samples, y = `Successful detection rate`, colour = as.factor(`Effect size`)))  + theme_bw() + ggtitle("Moderate non-independence") + geom_line() + ggtitle("Moderate non-independence") + xlab("Sample size") + ylab("Proportion") + labs(color = "Effect Size")
+ 
+indLegend <- get_legend(g.niid)
+
+ 
+g.niid <- ggplot(melt.niid.e0, aes(x = Samples, y = `Successful detection rate`, colour = as.factor(`Effect size`)))  + theme_bw() + ggtitle("Moderate non-independence") + geom_line() + ggtitle("Moderate non-independence") + xlab("Sample size") + ylab("Proportion") + theme(legend.position = "none") 
+ 
+ 
+ melt.niid.e0$Independence = rep("N1", nrow(melt.niid.e0))
+ 
+ #no error for N2
+#  
+# niid2.e0 <- p.matrix.0.niid2[1, , ]
+# colnames(niid2.e0) <- abs(m1 -m2) 
+# rownames(niid2.e0) <- n.samples
+# 
+# melt.niid2.e0 <- melt(niid2.e0)
+# colnames(melt.niid2.e0) <- c("Samples", "Effect size", "Successful detection rate")
+# 
+#  g.niid2 <- ggplot(melt.niid2.e0, aes(x = Samples, y = `Successful detection rate`, colour = as.factor(`Effect size`))) + theme_bw() + ggtitle("Moderate non-independence") + geom_line() + ggtitle("Low non-independence") + xlab("Sample size") + ylab("Proportion") 
+#  
+#  melt.niid2.e0$Independence = rep("N2", nrow(melt.niid2.e0))
+#  
+#  
+ #no error for N3
+ 
+nniid.e0 <- p.matrix.0.nniid[1, , ]
+colnames(nniid.e0) <- abs(m1 -m2) 
+rownames(nniid.e0) <- n.samples
+
+melt.nniid.e0 <- melt(nniid.e0)
+colnames(melt.nniid.e0) <- c("Samples", "Effect size", "Successful detection rate")
+melt.nniid.e0 <- rbind(melt.nniid.e0, start)
+
+
+g.nniid <- ggplot(melt.nniid.e0, aes(x = Samples, y = `Successful detection rate`, colour = as.factor(`Effect size`))) + theme_bw() + ggtitle("Non-independent") + geom_line()  + xlab("Sample size") + ylab("Proportion") + theme(legend.position = "none")
+ 
+ melt.nniid.e0$Independence = rep("N3", nrow(melt.nniid.e0))
+ 
+ #no error and independent 
+ 
+ iid.e0 <- p.matrix[1, , ]
+ colnames(iid.e0) <-abs(m1 -m2) 
+ rownames(iid.e0) <- n.samples
+
+ melt.iid.e0 <- melt(iid.e0)
+ colnames(melt.iid.e0) <- c("Samples", "Effect size", "Successful detection rate")
+ melt.iid.e0 <- rbind(melt.iid.e0, start)
+ 
+ g.iid <- ggplot(melt.iid.e0, aes(x = Samples, y = `Successful detection rate`, colour = as.factor(`Effect size`))) + theme_bw() + geom_line() + ggtitle("Independent") + xlab("Sample size") + ylab("Proportion") + theme(legend.position = "none")
+
+ tikz("linePlotIndProp.tex")
+ grid.arrange( g.niid, g.iid, g.nniid, indLegend, ncol = 2, nrow = 3, layout_matrix = cbind(c(2, 1, 3), c(4, 4, 4)), widths = c(2.5, 0.8))
+ melt.iid.e0$Independence = rep("N0", nrow(melt.iid.e0))
+ dev.off()
+ 
+
+```
+
+#Non-independence mean approximation boxplots 
+
+```{r non-iid boxplots}
+
+tmp <- list(melt.iid.e0, melt.niid.e0, melt.niid2.e0, melt.nniid.e0)
+iid.all <- do.call(rbind, tmp)
+
+g <- ggplot(iid.all, aes(x = as.factor(Samples), y = `Successful detection rate`, colour= as.factor(Independence)))
+
+g + geom_boxplot()
+
+g <- ggplot(iid.all, aes(x = as.factor(`Effect size`), y = `Successful detection rate`, colour = as.factor(`Independence`)))
+
+g + geom_boxplot() + theme_bw()
+
+```
+
+#Error to mean difference ratio 
+
+```{r error to effect size ratio}
+
+#obs error rate ~ distance/sigma2 
+
+tmp <- list(p0.m, p2.m, p5.m, p10.m)
+
+p.all <- do.call(rbind, tmp)
+
+p.all$Error <- rep(smp.error, each = nrow(p0.m))
+p.all$Sigma <- rep(7, nrow(p.all))
+p.all$`Weighted Distance` <- p.all$`Effect Size`/p.all$Sigma
+
+
+tmpData <- p.all[p.all$Samples == 250, ]
+ggplot() + geom_point(data = tmpData, aes(x = `Weighted Distance`, y = `Error`, colour = `Success Rate`), size = 3) 
+
+#trial
+
+# p.sub <- p.all[, c("Error", "Weighted Distance", "Success Rate")]
+# p.sub$`Weighted Distance` <- jitter(p.sub$`Weighted Distance`, 1)
+# d <- duplicated(p.sub)
+# p.sub <- p.sub[-which(d == TRUE), ]
+# g1 <- ggplot(p.sub, aes(x = `Weighted Distance`, y = `Error`, z = `Success Rate`)) + stat_density2d()
+# g1
+
+#new trial 
+
+pAbv90 <- p.all[p.all$`Success Rate` > 0.9, ]
+
+ggplot() + geom_point(data = pAbv90, aes(x = `Weighted Distance`, y = `Error`, colour = `Samples`), size = 3, alpha= 1/10) 
+
+ggplot() + geom_point(data = pAbv90[pAbv90$Samples == 10,], aes(x = `Weighted Distance`, y = `Error`), colour = "red") 
+
+ggplot() +  geom_point(data = pAbv90[pAbv90$Samples == 25,], aes(x = `Weighted Distance`, y = `Error`), colour = "pink")
+
+findMin <- function(data, error){
+  
+  listSamples <- list()
+  listError <- list()
+  
+  for(i in 1:length(n.samples)){
+    
+    subset <- data[data$Samples == n.samples[i],]
+     
+    for(j in 1:length(error)){
+      
+      listError[[j]] <- min(subset$`Weighted Distance`[subset$Error == error[j]], na.rm = TRUE)
+      
+    }
+    listSamples[[i]] <- do.call(rbind, listError)
+    # rownames(listSamples[[i]]) <- as.character(error)
+    
+    
+  }
+  returnDf <- as.data.frame(do.call(rbind,listSamples))
+  returnDf$Samples <- rep(n.samples, each = 4)
+  returnDf$Error <- rep(error, 11)
+  colnames(returnDf) <- c("Min", "Samples", "Error")
+  return(returnDf)
+}
+
+trial <- findMin(pAbv90, error = smp.error)
+trial$Min[which(trial$Min == Inf)] <- NA 
+
+
+ggplot() + geom_line(data = trial[trial$Samples == 10, ], aes(x = Min, y = Error)) + geom_line(data = trial[trial$Samples == 25, ], aes(x = Min, y = Error)) + geom_line(data = trial[trial$Samples == 50, ], aes(x = Min, y = Error))  + geom_line(data = trial[trial$Samples == 75, ], aes(x = Min, y = Error)) + geom_line(data = trial[trial$Samples == 100, ], aes(x = Min, y = Error)) + geom_line(data = trial[trial$Samples == 125, ], aes(x = Min, y = Error)) + geom_line(data = trial[trial$Samples == 250, ], aes(x = Min, y = Error))
+
+ygrid<- seq(min(pAbv90$Error), max(pAbv90$Error), 0.3)
+xgrid <- seq(min(pAbv90$`Weighted Distance`), max(pAbv90$`Weighted Distance`),0.3)
+
+data.loess <-  loess(pAbv90$Error ~  pAbv90$`Weighted Distance` + pAbv90$Samples, data = pAbv90)
+
+data.fit <-  expand.grid(weight = xgrid, error = ygrid)
+
+mtrx3d <- predict(data.loess, newdata = data.fit)
+contour(x = xgrid, y = ygrid, z = mtrx3d)
+
+```
+
+#Generate new p matrix data for error weighted distance plot
+
+
+```{r}
+
+newError <- seq(0, 10, by = 0.1)
+m1 <- seq(10, 50, 1)
+m2 <- rep(10, length(m1))
+sd.m1 <- rep(7, length(m1))
+sd.m2 <- rep(7, length(m2))
+we.m1 <- rep(0.5, length(m1))
+we.m2 <- 1 - we.m1
+
+n.samples <- c(10, seq(25, 250, by = 25))
+
+nm <- as.character(abs(m1 - m2))
+n = 1000
+all.data <- array(dim = list(length(newError), nrow = n, ncol = length(m1)))
+
+for(i in 1:length(newError)){
+  
+  all.data[i, , ] <- generate_rm(smp_error =newError[i], mean_vector1 =  m1, mean_vector2 = m2, sd_vector1 = sd.m1, sd_vector2 = sd.m2, weight1 = we.m1,
+                                 weight2 = we.m2, colnm  = nm, n_samples = n)
+}
+
+
+
+count <- 0
+pErrorM <- array(NA, dim = list(length(newError), nrow = length(n.samples), ncol = length(m1)))
+pb <- txtProgressBar(max = 100)
+
+for(i in 1:length(newError)){
+  # print(paste0("Sample error = ", smp.error[i]))
+  
+  for(j in 1:length(n.samples)){
+    # print(paste0("No. of samples = ", n.samples[j]))
+    
+    for(k in 1:length(m1)){
+      # print(paste0("Mean = ", m1[k]))
+      count <- count + 1
+      setTxtProgressBar(pb, value = (count/ (length(newError) * length(n.samples) * length(m1)))*100)
+   pErrorM [i, j, k] <- proportion.fun(nsamples = n.samples[j], d1 = all.data[i, , k], niter = 100)
+    }
+  }
+  
+}
+```
+
+
+#New contour plots for error weighted distance
+
+```{r}
+
+errorList <- list()
+
+for(i in 1 :dim(pErrorM)[1]){
+  # rownames(pErrorM[i, ,]) <- as.character(n.samples)
+  errorList[[i]] <- pErrorM[i, , ]
+}
+
+tmp <- do.call(rbind, errorList)
+rownames(tmp) <- as.character(rep(n.samples, 101))
+colnames(tmp) <- as.character(abs(m1-m2))
+tmp <- as.data.frame(tmp)
+tmp$error <- rep(newError, )
+
+
+errorMelt <- melt(tmp)
+colnames(errorMelt) <- c("Samples", "Effect Size", "Proportion")
+errorMelt$error <- rep(newError, length(m1)*length(n.samples))
+errorMelt$Weight <- errorMelt$`Effect Size`/7
+
+ggplot() + geom_point(data = errorMelt, aes(x = errorMelt$`Effect Size`, y = errorMelt$error, color = errorMelt$Proportion))
+# 
+# pAbv80 <- errorMelt[errorMelt$Proportion > 0.8, ]
+# 
+# ggplot(pAbv80) + geom_point(aes(x =pAbv80$`Effect Size`, y = pAbv80$error, color = pAbv80$Samples)) 
+# 
+# 
+
+p1 <- ggplot(errorMelt[errorMelt$Samples == 10 , ]) + geom_point(aes(x = Weight, y = error, color = Proportion), size = 3) + labs(tag = "A") + scale_color_viridis(discrete =FALSE) + theme_bw() + ylab("Error (cm)") + theme(legend.position = "none")
+
+p2 <- ggplot(errorMelt[errorMelt$Samples == 25 , ]) + geom_point(aes(x = Weight, y = error, color = Proportion), size = 3) + labs(tag = "B") + scale_color_viridis(discrete =FALSE) + theme_bw() + ylab("Error (cm)")+ theme(legend.position = "none")
+
+
+p3 <- ggplot(errorMelt[errorMelt$Samples == 50 , ]) + geom_point(aes(x = Weight, y = error, color = Proportion), size = 3) + labs(tag = "C") + scale_color_viridis(discrete =FALSE) + theme_bw() + ylab("Error (cm)")+ theme(legend.position = "none")
+
+
+p4 <- ggplot(errorMelt[errorMelt$Samples == 75 , ]) + geom_point(aes(x = Weight, y = error, color = Proportion), size = 3) + labs(tag = "D") + scale_color_viridis(discrete =FALSE) + theme_bw() + ylab("Error (cm)")+ theme(legend.position = "none")
+
+
+p5 <- ggplot(errorMelt[errorMelt$Samples == 100 , ]) + geom_point(aes(x = Weight, y = error, color = Proportion), size = 3) + labs(tag = "E") + scale_color_viridis(discrete =FALSE) + theme_bw() + ylab("Error (cm)")+ theme(legend.position = "none")
+
+
+p6 <- ggplot(errorMelt[errorMelt$Samples == 125 , ]) + geom_point(aes(x = Weight, y = error, color = Proportion), size = 3) + labs(tag = "F") + scale_color_viridis(discrete =FALSE) + theme_bw() + ylab("Error (cm)")+ theme(legend.position = "none")
+
+
+p7 <- ggplot(errorMelt[errorMelt$Samples == 150 , ]) + geom_point(aes(x = Weight, y = error, color = Proportion), size = 3) + labs(tag = "G") + scale_color_viridis(discrete =FALSE) + theme_bw() + ylab("Error (cm)")+ theme(legend.position = "none")
+
+
+p8 <- ggplot(errorMelt[errorMelt$Samples == 175 , ]) + geom_point(aes(x = Weight, y = error, color = Proportion), size = 3) + labs(tag = "H") + scale_color_viridis(discrete =FALSE) + theme_bw() + ylab("Error (cm)")+ theme(legend.position = "none")
+
+
+p9 <- ggplot(errorMelt[errorMelt$Samples == 200, ]) + geom_point(aes(x = Weight, y = error, color = Proportion), size = 3) + labs(tag = "I") + scale_color_viridis(discrete =FALSE) + theme_bw() + ylab("Error (cm)")+ theme(legend.position = "none")
+
+
+p10 <- ggplot(errorMelt[errorMelt$Samples == 225 , ]) + geom_point(aes(x = Weight, y = error, color = Proportion), size = 3) + labs(tag = "J") + scale_color_viridis(discrete =FALSE) + theme_bw() + ylab("Error (cm)")
+
+tikz("contourPlot.tex")
+grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, layout_matrix=cbind(c(1, 2, 3, 4, 5), c(6, 7, 8, 9, 10)), ncol = 2, nrow = 5)
+dev.off()
+```
+
+#Variance approximation 
+
+```{r variance approximation}
+
+n.samples <- c(10, seq(25, 250, by = 25))
+S = 1000
+
+c.var <- array(dim = c(length(smp.error), length(n.samples), length(m1), S,  2))
+
+pb <- txtProgressBar(max = 100)
+count = 0
+for(i in 1:length(smp.error)){
+  # print(paste("Error = ", smp.error[i]))
+  for(k in 1:length(n.samples)){
+    # print(paste("Samples =", n.samples[k]))
+  for(j in 1:length(m1)){
+    # print(paste("Var = ", m1[j]))
+    count = count + 1
+    setTxtProgressBar(pb, value = (count/(length(smp.error)*length(n.samples)*length(m1))) *100)
+    c.var[i, k, j, , ] <- var.approx.fun(n.samples[k], all.data[i, ,j ], n.iter = S)
+  }
+}
+}
+
+#0 error
+
+var.approx.e0 <- c.var[1, , , ,] #first subset is n.samples
+#second subset is difference 
+#third is 100 x 2 dataframe
+# c(length(n.samples), length(nm), 200, 1)
+reformat.df <- function(error.m, dim.m1, samplesize){
+tmp <- array( dim = dim.m1)
+
+for(i in 1:dim.m1[1]){
+  for(j in 1:dim.m1[2]){
+    
+    tmp[i, j, , 1] <- c((error.m[i, j, ,1] - (sd.m1[j])^2), 
+                              (error.m[i, j, , 2]- (sd.m2[j])^2))
+  }
+}
+n.samples = c(10, seq(25, 250, by = 25))
+e <- which(n.samples == (samplesize))
+
+t <- t(unlist(tmp[e, , ,]))
+t <- scale(t)
+colnames(t) <- nm
+
+melt.t <- melt(t)
+melt.t <- melt.t[, -which(names(melt.t) == "Var1")]
+melt.t$Samples <- c(rep(samplesize, nrow(melt.t)))
+
+colnames(melt.t) <- c("Difference", "Precision", "Samples")
+
+return(melt.t)
+
+}
+
+var.s <- list()
+
+for(i in 1:length(n.samples)){
+  
+  
+ var.s[[i]] <- reformat.df(error.m = var.approx.e0, dim.m1 = c(length(n.samples), length(nm), 2000, 1), samplesize = n.samples[i])
+  
+  
+}
+var.e0.all <- do.call(rbind, var.s)
+
+#plot
+
+# jpeg(filename = paste0(getwd(), "/Figures/15Jul/SamplesPrecisionE0Boxplot.jpg"))
+# ggplot(data = var.e0.all, aes(x = as.factor(Samples), y = Precision, colour = as.factor(Difference) )) + geom_boxplot() + ggtitle("0cm error")
+# dev.off()
+
+
+
+#counting all NAs
+var.e0.all$Count <- ifelse(is.na(var.e0.all$Precision), 1, NA)
+var.na <-var.e0.all[which(is.na(var.e0.all$Precision)), ]
+
+difference.e0 <- aggregate(Count ~ Difference, data = var.na, sum)
+# jpeg(filename = paste0(getwd(), "/Figures/15Jul/NonDetectionE0.jpg"))
+plot(difference.e0$Difference, difference.e0$Count, type = "o", ylab = "Count of non-detection", xlab = "Difference in mean")
+# dev.off()
+
+
+
+#2cm error
+
+var.approx.e2 <- c.var[2, , , , ]
+
+var.s <- list()
+
+for(i in 1:length(n.samples)){
+  
+  
+  var.s[[i]] <- reformat.df(error.m = var.approx.e2, dim.m1 = c(length(n.samples), length(nm), 2000, 1), samplesize = n.samples[i])
+  
+  
+}
+var.e2.all <- do.call(rbind, var.s)
+
+#plot
+# ggplot(data = var.e2.all, aes(x = as.factor(Samples), y = Precision, colour = as.factor(Difference))) + geom_boxplot() + ggtitle("0cm error")
+
+#counting all NAs
+var.e2.all$Count <- ifelse(is.na(var.e2.all$Precision), 1, NA)
+var.na.e2 <- var.e2.all[which(is.na(var.e2.all$Precision)), ]
+
+difference.e2 <- aggregate(Count ~ Difference, data = var.na.e2, sum)
+
+plot(difference.e2$Difference, difference.e2$Count, type = "o", ylab = "Count of non-detection", xlab = "Difference in vars")
+
+#5cm error
+
+
+var.approx.e5 <- c.var[3, , , , ]
+
+var.s <- list()
+
+for(i in 1:length(n.samples)){
+  
+  
+  var.s[[i]] <- reformat.df(error.m = var.approx.e5, dim.m1 = c(length(n.samples), length(nm), 2000, 1), samplesize = n.samples[i])
+  
+  
+}
+var.e5.all <- do.call(rbind, var.s)
+
+#plot
+# ggplot(data = var.e5.all, aes(x = as.factor(Samples), y = Precision, colour = as.factor(Difference))) + geom_boxplot() + ggtitle("0cm error")
+
+#counting all NAs
+var.e5.all$Count <- ifelse(is.na(var.e5.all$Precision), 1, NA)
+var.na.e5 <- var.e5.all[which(is.na(var.e5.all$Precision)), ]
+
+difference.e5 <- aggregate(Count ~ Difference, data = var.na.e5, sum)
+
+plot(difference.e5$Difference, difference.e5$Count, type = "o", ylab = "Count of non-detection", xlab = "Difference in vars")
+
+
+#10cm error 
+var.approx.e10 <- c.var[4, , , , ]
+
+var.s <- list()
+
+for(i in 1:length(n.samples)){
+  
+  
+  var.s[[i]] <- reformat.df(error.m = var.approx.e10, dim.m1 = c(length(n.samples), length(nm), 2000, 1), samplesize = n.samples[i])
+  
+  
+}
+var.e10.all <- do.call(rbind, var.s)
+
+#plot
+# ggplot(data = var.e10.all, aes(x = as.factor(Samples), y = Precision, colour = as.factor(Difference))) + geom_boxplot() + ggtitle("0cm error")
+
+#counting all NAs
+var.e10.all$Count <- ifelse(is.na(var.e10.all$Precision), 1, NA)
+var.na.e10 <- var.e10.all[which(is.na(var.e10.all$Precision)), ]
+
+difference.e10 <- aggregate(Count ~ Difference, data = var.na.e10, sum)
+
+plot(difference.e10$Difference, difference.e10$Count, type = "o", ylab = "Count of non-detection", xlab = "Difference in vars")
+```
+
+
+#Dual axes plot for variance approximation 
+
+```{r}
+
+
+
+p0 <- dualAxesPlot(meanApproxData = var.e0.all, nonDetectData = difference.e10, legend = TRUE, tag = "A")
+p2 <- dualAxesPlot(meanApproxData = var.e2.all, nonDetectData = difference.e10, legend = TRUE, tag = "B")
+p5 <- dualAxesPlot(meanApproxData = var.e5.all, nonDetectData = difference.e10, legend = TRUE, tag = "C")
+p10 <- dualAxesPlot(meanApproxData = var.e10.all, nonDetectData = difference.e10, legend = TRUE, tag = "D")
+
+
+
+
+grid.arrange( p0, p2, p10, dualLegend, ncol = 2, nrow =2, layout_matrix = cbind(c(1, 2), c(3, 3)),widths = c(3.0,  0.6))
+
+tikz("varApproxE0.tex")
+p0
+dev.off()
+
+tikz("varApproxE2.tex")
+p2
+dev.off()
+
+tikz("varApproxE5.tex")
+p5
+dev.off()
+
+tikz("varApproxE10.tex")
+p10
+dev.off()
+
+```
+
+#Graphical plot for unequal variance runs
+
+
+```{r illustrative only }
+
+set.seed(124)
+means <- c(40, 10)
+sds1 <- c(1, 7); sds2 <- c(4, 7)
+sds3 <- c(7, 7); sds4 <- c(10, 7); sds5 <- c(13, 7); sds6 <- c(16, 7)
+
+ind <- sample(1:2, 1000, replace = T, prob = c(0.5, 0.5))
+
+uneq.df <- data.frame(cbind(Unequal1 = rnorm(1000, mean = means[ind], sd = sds1[ind]),
+                            Unequal2 = rnorm(1000, mean = means[ind], sd = sds2[ind]),
+                            Unequal3 = rnorm(1000, mean = means[ind], sd = sds3[ind]),
+                            Unequal4 = rnorm(1000, mean = means[ind], sd = sds4[ind]),
+                            Unequal5 = rnorm(1000, mean = means[ind], sd = sds5[ind]),
+                            Unequal6 = rnorm(1000, mean = means[ind], sd = sds6[ind])))
+
+p1 <- ggplot(uneq.df, aes(x = Unequal1)) + geom_density(color="darkblue", fill="lightblue") + xlim(c(-20, 80)) + xlab("Case 0: SD1 = 1, SD2= 7") + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ")
+p2 <- ggplot(uneq.df, aes(x = Unequal2)) + geom_density(color="darkblue", fill="lightblue") + xlim(c(-20, 80)) + xlab("Case 1: SD1 = 4, SD2 = 7") + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab("p(x)")
+p3 <- ggplot(uneq.df, aes(x = Unequal3)) + geom_density(color="darkblue", fill="lightblue") + xlim(c(-20, 80)) + xlab("Case 2: SD1 = 7, SD2 = 7") + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ")
+p4 <- ggplot(uneq.df, aes(x = Unequal4)) + geom_density(color="darkblue", fill="lightblue")  + xlim(c(-20, 80)) + xlab("Case 3: SD1 = 10, SD2 = 7") + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ")
+p5 <- ggplot(uneq.df, aes(x = Unequal5)) + geom_density(color="darkblue", fill="lightblue")  + xlim(c(-20, 80)) + xlab("Case 4: SD1 = 13 , SD2 = 7") + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ")
+p6 <- ggplot(uneq.df, aes(x = Unequal6)) + geom_density(color="darkblue", fill="lightblue")  + xlim(c(-20, 80)) + xlab("Case 1: SD1 = 16, SD2 = 7") + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ")
+
+grid.arrange(p1, p2, p3, p4, p5, p6, ncol = 2, layout_matrix = cbind(c(1, 2, 3), c(4, 5, 6)))
+
+
+```
+
+
+
+
+#Unequal variance effect 
+
+
+```{r unequal variance effect}
+
+sd.m2 <- c(1, 4, 7, 10, 13, 16)
+sd.m1 <- rep(7, length(sd.m2))
+m1 <- rep(40, length(sd.m2))
+m2 <- rep(10, length(sd.m2))
+smp.error <- c(0, 2, 5, 10)
+we.m1 <- rep(0.5, length(sd.m1))
+we.m2 <- 1 - we.m1
+
+nm <- as.character(sd.m2)
+n = 1000
+uneq.all.data <- array(dim = list(length(smp.error), nrow = n, ncol = length(m1)))
+
+for(i in 1:length(smp.error)){
+  
+  uneq.all.data[i, , ] <- generate_rm(smp_error = smp.error[i], mean_vector1 =  m1, mean_vector2 = m2, sd_vector1 = sd.m1, sd_vector2 = sd.m2, weight1 = we.m1,
+                                 weight2 = we.m2, colnm  = nm, n_samples = n)
+}
+
+```
+
+#Unequal proportion matrix
+
+```{r unequal p matrix}
+
+n.samples <- c(10, seq(25, 250, by = 25))
+
+uneq.p.matrix <- array(NA, dim = list(length(smp.error), nrow = length(n.samples), ncol = length(sd.m2)))
+uneq.v.matrix <- array(NA, dim = list(length(smp.error), nrow = length(n.samples), ncol = length(sd.m2)))
+
+for(i in 1:length(smp.error)){
+  print(paste0("Sample error = ", smp.error[i]))
+  
+  for(j in 1:length(n.samples)){
+    print(paste0("No. of samples = ", n.samples[j]))
+    
+    for(k in 1:length(m1)){
+      print(paste0("Sd = ", sd.m2[k]))
+    # uneq.p.matrix[i, j, k] <- proportion.fun(nsamples = n.samples[j], d1 = uneq.all.data[i, , k] )
+      
+      clusterBIC <- matrix(NA, ncol = 3, nrow = 500)
+
+for(m in 1:500){
+  tmp <- clust_fun_01(n=n.samples[j], dist = uneq.all.data[i, , k])
+  # print(tmp[1])
+  clusterBIC[m, 1] <- tmp[1]
+  clusterBIC[m, 2] <- tmp[2]
+  clusterBIC[m, 3] <- tmp[2,2]
+}
+colnames(clusterBIC) <- c("E1", "E2", "V2")
+bimod <- 0
+count <- 0
+for(m in 1:500){
+  
+  if(abs(clusterBIC[m,1]) > abs(clusterBIC[m,2])) {
+    
+    bimod <- bimod + 1
+  }
+  
+  if(is.na(clusterBIC[m, 3]) == FALSE && abs(clusterBIC[m, 1]) > abs(clusterBIC[m, 3]) && abs(clusterBIC[m, 2]) > abs(clusterBIC[m, 3])) {
+    
+    count <- count+1
+  }
+
+  }
+
+#proportion 
+p <- count/ 500
+v <- bimod/500
+
+uneq.p.matrix[i, j, k] <- p
+uneq.v.matrix[i, j, k] <- v
+    }
+  }
+  
+}
+
+
+#no error 
+
+uneq.p0<- uneq.p.matrix[1, , ]
+colnames(uneq.p0) <- sd.m2
+rownames(uneq.p0) <- n.samples
+
+uneq.v0 <- uneq.v.matrix[1, , ]
+colnames(uneq.v0) <- sd.m2
+rownames(uneq.v0) <- n.samples
+
+uneq.p0.m <- melt(uneq.p0)
+colnames(uneq.p0.m) <- c("Samples", "StandDev", "Unequal variance detection")
+uneq.v0.m <- melt(uneq.v0)
+colnames(uneq.v0.m) <- c("Samples", "StandDev", "Bimodality detection")
+
+uneq0 <-merge(uneq.p0.m, uneq.v0.m, by = c("Samples", "StandDev"))
+start <- data.frame(cbind(rep(0, length(sd.m2)), unique(uneq0$`StandDev`), rep(0, length(sd.m2)), rep(0, length(sd.m2))))
+colnames(start) <- c("Samples","StandDev", "Bimodality detection", "Unequal variance detection")
+uneq0 <- rbind(uneq0, start)
+
+l.0 <- ggplot(uneq0)+
+  geom_line(aes(x = uneq0$Samples,y = uneq0$`Unequal variance detection`, color = factor(uneq0$`StandDev`))) + theme_bw() + ggtitle("0cm error") +geom_line(aes(x = uneq0$Samples,y = uneq0$`Bimodality detection`, color = factor(uneq0$`StandDev`)), linetype = 2) + xlab("Sample size") + ylab("Proportion") + labs(color = "SD")
+
+uneqVarLegend <- get_legend(l.0)
+
+
+l.0 <- ggplot(uneq0)+
+  geom_line(aes(x = uneq0$Samples,y = uneq0$`Unequal variance detection`, color = factor(uneq0$`StandDev`))) + theme_bw() + ggtitle("0cm error") +geom_line(aes(x = uneq0$Samples,y = uneq0$`Bimodality detection`, color = factor(uneq0$`StandDev`)), linetype = 2) + xlab("Sample size") + ylab("Proportion") + labs(color = "Standard Deviation") + theme(legend.position = "none")
+
+
+#2cm error 
+uneq.p2 <- uneq.p.matrix[2, , ]
+colnames(uneq.p2) <- sd.m2
+rownames(uneq.p2) <- n.samples
+
+uneq.v2 <- uneq.v.matrix[2, , ]
+colnames(uneq.v2) <- sd.m2
+rownames(uneq.v2) <- n.samples
+
+uneq.p2.m <- melt(uneq.p2)
+colnames(uneq.p2.m) <- c("Samples", "StandDev", "Unequal variance detection")
+uneq.v2.m <- melt(uneq.v2)
+colnames(uneq.v2.m) <- c("Samples", "StandDev", "Bimodality detection")
+
+uneq2 <-merge(uneq.p2.m, uneq.v2.m, by = c("Samples", "StandDev"))
+start <- data.frame(cbind(rep(0, length(sd.m2)), unique(uneq2$`StandDev`), rep(0, length(sd.m2)), rep(0, length(sd.m2))))
+colnames(start) <- c("Samples","StandDev", "Bimodality detection", "Unequal variance detection")
+uneq2 <- rbind(uneq2, start)
+
+l.2<- ggplot(uneq2)+
+  geom_line(aes(x = uneq2$Samples,y = uneq2$`Unequal variance detection`, color = factor(uneq2$`StandDev`))) + theme_bw() + ggtitle("2cm error") +geom_line(aes(x = uneq2$Samples,y = uneq2$`Bimodality detection`, color = factor(uneq2$`StandDev`)), linetype = 2)  +  theme(legend.position = "None") + xlab("Sample size") + ylab("Proportion") + labs(color = "Standard Deviation") 
+
+
+
+
+
+#5cm error 
+
+uneq.p5 <- uneq.p.matrix[3, , ]
+colnames(uneq.p5) <- sd.m2
+rownames(uneq.p5) <- n.samples
+
+uneq.v5 <- uneq.v.matrix[3, , ]
+colnames(uneq.v5) <- sd.m2
+rownames(uneq.v5) <- n.samples
+
+uneq.p5.m <- melt(uneq.p5)
+colnames(uneq.p5.m) <- c("Samples", "StandDev", "Unequal variance detection")
+uneq.v5.m <- melt(uneq.v5)
+colnames(uneq.v5.m) <- c("Samples", "StandDev", "Bimodality detection")
+
+uneq5 <-merge(uneq.p5.m, uneq.v5.m, by = c("Samples", "StandDev"))
+start <- data.frame(cbind(rep(0, length(sd.m2)), unique(uneq5$`StandDev`), rep(0, length(sd.m2)), rep(0, length(sd.m2))))
+colnames(start) <- c("Samples","StandDev", "Bimodality detection", "Unequal variance detection")
+uneq5 <- rbind(uneq5, start)
+
+l.5<- ggplot(uneq5)+
+  geom_line(aes(x = uneq5$Samples,y = uneq5$`Unequal variance detection`, color = factor(uneq5$`StandDev`))) + theme_bw() + ggtitle("5cm error") +geom_line(aes(x = uneq5$Samples,y = uneq5$`Bimodality detection`, color = factor(uneq5$`StandDev`)), linetype = 2)  + theme(legend.position = "None") + xlab("Sample size") + ylab("Proportion") + labs(color = "Standard Deviation") + theme(legend.position = "none")
+
+
+#10cm error
+
+uneq.p10 <- uneq.p.matrix[4, , ]
+colnames(uneq.p10) <- sd.m2
+rownames(uneq.p10) <- n.samples
+
+uneq.v10 <- uneq.v.matrix[4, , ]
+colnames(uneq.v10) <- sd.m2
+rownames(uneq.v10) <- n.samples
+
+uneq.p10.m <- melt(uneq.p10)
+colnames(uneq.p10.m) <- c("Samples", "StandDev", "Unequal variance detection")
+uneq.v10.m <- melt(uneq.v10)
+colnames(uneq.v10.m) <- c("Samples", "StandDev", "Bimodality detection")
+
+uneq10 <-merge(uneq.p10.m, uneq.v10.m, by = c("Samples", "StandDev"))
+start <- data.frame(cbind(rep(0, length(sd.m2)), unique(uneq10$`StandDev`), rep(0, length(sd.m2)), rep(0, length(sd.m2))))
+colnames(start) <- c("Samples","StandDev", "Bimodality detection", "Unequal variance detection")
+uneq10 <- rbind(uneq10, start)
+
+l.10<- ggplot(uneq10)+
+  geom_line(aes(x = uneq10$Samples,y = uneq10$`Unequal variance detection`, color = factor(uneq10$`StandDev`))) + theme_bw() + ggtitle("10cm error") +geom_line(aes(x = uneq10$Samples,y = uneq10$`Bimodality detection`, color = factor(uneq10$`StandDev`)), linetype = 2) + theme(legend.position = "None") + xlab("Sample size") + ylab("Proportion") + labs(color = "Standard Deviation") + theme(legend.position = "none")
+
+
+#grid arrange line plot
+
+# jpeg("~/Figures/15Jul/SamplesSuccessbyErrorEffect.jpg")
+
+grid.arrange(l.0, l.2, l.5, l.10, uneqVarLegend, ncol = 3, nrow = 2, layout_matrix = cbind(c(1, 2), c(3, 4), c(5, 5)), widths = c(2.5, 2.5, 0.8))
+# dev.off()
+
+```
+
+
+#Graphical plot for unequal weights 
+
+```{r illustrative unequal weights}
+
+set.seed(124)
+means <- c(40, 10)
+sds <- c(7, 7)
+
+ind1 <- sample(1:2, 1000, replace = T, prob = c(0, 1))
+ind2 <- sample(1:2, 1000, replace = T, prob = c(0.1, 0.9))
+ind3 <- sample(1:2, 1000, replace = T, prob = c(0.2, 0.8))
+ind4 <- sample(1:2, 1000, replace = T, prob = c(0.3, 0.7))
+ind5 <- sample(1:2, 1000, replace = T, prob = c(0.4, 0.6))
+ind6 <- sample(1:2, 1000, replace = T, prob = c(0.5, 0.5))
+
+
+uneq.df <- data.frame(cbind(Unequal1 = rnorm(1000, mean = means[ind1], sd =sds[ind1]),
+                            Unequal2 = rnorm(1000, mean = means[ind2], sd =sds[ind2]),
+                            Unequal3 = rnorm(1000, mean = means[ind3], sd =sds[ind3]),
+                            Unequal4 = rnorm(1000, mean = means[ind4], sd =sds[ind4]),
+                            Unequal5 = rnorm(1000, mean = means[ind5], sd =sds[ind5]),
+                            Unequal6 = rnorm(1000, mean = means[ind6], sd=sds[ind6])))
+
+p1 <- ggplot(uneq.df, aes(x = Unequal1)) + geom_density(color="darkblue", fill="lightblue") + xlim(c(-20, 70)) + ylab(" ") + xlab(" Case0: weight 1 = 0, weight 2= 1" ) + theme(axis.text.y  = element_blank(), axis.ticks = element_blank())
+p2 <- ggplot(uneq.df, aes(x = Unequal2)) + geom_density(color="darkblue", fill="lightblue") + xlim(c(-20, 70))+ ylab("p(x)")  + xlab(" Case1: weight 1 = 0.1, weight 2= 0.9" ) + theme(axis.text.y  = element_blank(), axis.ticks = element_blank())
+p3 <- ggplot(uneq.df, aes(x = Unequal3)) + geom_density(color="darkblue", fill="lightblue")+ xlim(c(-20, 70))+ ylab(" ") + xlab(" Case2: weight 1 = 0.2, weight 2= 0.8" ) + theme(axis.text.y  = element_blank(), axis.ticks = element_blank())
+p4 <- ggplot(uneq.df, aes(x = Unequal4)) + geom_density(color="darkblue", fill="lightblue")+ xlim(c(-20, 70))+ ylab(" ") + xlab(" Case3: weight 1 = 0.3, weight 2= 0.7" ) + theme(axis.text.y  = element_blank(), axis.ticks = element_blank())
+p5 <- ggplot(uneq.df, aes(x = Unequal5)) + geom_density(color="darkblue", fill="lightblue")+ xlim(c(-20, 70))+ ylab(" ") + xlab(" Case4: weight 1 = 0.4, weight 2= 0.6" ) + theme(axis.text.y  = element_blank(), axis.ticks = element_blank())
+p6 <- ggplot(uneq.df, aes(x = Unequal6)) + geom_density(color="darkblue", fill="lightblue")+ xlim(c(-20, 70))+ ylab(" ") + xlab(" Case5: weight 1 = 0.5, weight 2= 0.5" )+ theme(axis.text.y  = element_blank(), axis.ticks = element_blank())
+
+grid.arrange(p1, p2, p3, p4, p5, p6, layout_matrix = cbind(c(1, 2, 3), c(4, 5, 6)))
+
+```
+
+
+#Unequal weights, equal variance 
+
+```{r data generation unequal weights} 
+
+we.m1 <- seq(0, 0.5, by = 0.1)
+we.m2 <- 1 - we.m1
+sd.m2 <- rep(7, length(we.m1))
+sd.m1 <- rep(7, length(we.m1))
+m1 <- rep(40, length(sd.m2))
+m2 <- rep(10, length(sd.m2))
+smp.error <- c(0, 2, 5, 10)
+
+
+nm <- as.character(we.m1)
+n = 1000
+w.all.data <- array(dim = list(length(smp.error), nrow = n, ncol = length(we.m1)))
+
+for(i in 1:length(smp.error)){
+  
+ w.all.data[i, , ] <- generate_rm(smp_error = smp.error[i], mean_vector1 =  m1, mean_vector2 = m2, sd_vector1 = sd.m1, sd_vector2 = sd.m2, weight1 = we.m1,
+                                 weight2 = we.m2, colnm  = nm, n_samples = n)
+}
+
+```
+
+#Proportion matrix for unequal weights
+
+
+```{r}
+
+n.samples <- c(10, seq(25, 250, by = 25))
+
+w.p.matrix <- array(NA, dim = list(length(smp.error), nrow = length(n.samples), ncol = length(we.m1)))
+pb <- txtProgressBar(max = 100)
+count = 0
+for(i in 1:length(smp.error)){
+  # print(paste0("Sample error = ", smp.error[i]))
+  
+  for(j in 1:length(n.samples)){
+    # print(paste0("No. of samples = ", n.samples[j]))
+    
+    for(k in 1:length(m1)){
+      # print(paste0("Weight = ", we.m1[k]))
+    w.p.matrix[i, j, k] <- wp.fun(nsamples = n.samples[j], d1 = w.all.data[i, , k] )
+    count = count + 1
+    setTxtProgressBar(pb, value = (count/(length(smp.error)* length(n.samples)*length(m1))*100))
+    }
+  }
+  
+}
+
+
+#no error 
+
+w.p0 <- w.p.matrix[1, , ]
+colnames(w.p0) <- we.m1
+rownames(w.p0) <- n.samples
+
+w.p0.m <- melt(w.p0)
+colnames(w.p0.m) <- c("Samples", "Weight", "Detection rate")
+
+start <- data.frame(cbind(rep(0, length(we.m1)), unique(w.p0.m$`Weight`), rep(0, length(we.m1))))
+colnames(start) <- c("Samples","Weight", "Detection rate")
+wp0.df <- rbind(w.p0.m, start)
+
+w.0 <- ggplot(wp0.df, aes(x = Samples, y = `Detection rate`, color = as.factor(Weight))) +geom_line() + ggtitle("0cm error") + theme_bw() + labs(color = "Weight")
+
+wtLegend <- get_legend(w.0)
+
+
+w.0 <- ggplot(wp0.df, aes(x = Samples, y = `Detection rate`, color = as.factor(Weight))) +geom_line() + ggtitle("0cm error") + theme_bw() + labs(color = "Weight") + theme(legend.position = "none") +xlab("Sample size") + ylab("Proportion") 
+
+
+#2cm error 
+
+w.p2 <- w.p.matrix[2, , ]
+colnames(w.p2) <- we.m1
+rownames(w.p2) <- n.samples
+
+w.p2.m <- melt(w.p2)
+colnames(w.p2.m) <- c("Samples", "Weight", "Detection rate")
+
+start <- data.frame(cbind(rep(0, length(we.m1)), unique(w.p2.m$`Weight`), rep(0, length(we.m1))))
+colnames(start) <- c("Samples","Weight", "Detection rate")
+wp2.df <- rbind(w.p2.m, start)
+
+w.2 <- ggplot(wp2.df, aes(x = Samples, y = `Detection rate`, color = as.factor(Weight))) +geom_line() + ggtitle("2cm error") + theme_bw() + theme(legend.position = "none") +xlab("Sample size") + ylab("Proportion") 
+
+
+#5cm error 
+
+w.p5 <- w.p.matrix[3, , ]
+colnames(w.p5) <- we.m1
+rownames(w.p5) <- n.samples
+
+w.p5.m <- melt(w.p5)
+colnames(w.p5.m) <- c("Samples", "Weight", "Detection rate")
+
+start <- data.frame(cbind(rep(0, length(we.m1)), unique(w.p5.m$`Weight`), rep(0, length(we.m1))))
+colnames(start) <- c("Samples","Weight", "Detection rate")
+wp5.df <- rbind(w.p5.m, start)
+
+w.5 <- ggplot(wp5.df, aes(x = Samples, y = `Detection rate`, color = as.factor(Weight))) +geom_line() + ggtitle("5cm error") + theme_bw() + theme(legend.position = "none") +xlab("Sample size") + ylab("Proportion") 
+
+#10 error 
+
+w.p10 <- w.p.matrix[4, , ]
+colnames(w.p10) <- we.m1
+rownames(w.p10) <- n.samples
+
+w.p10.m <- melt(w.p10)
+colnames(w.p10.m) <- c("Samples", "Weight", "Detection rate")
+
+start <- data.frame(cbind(rep(0, length(we.m1)), unique(w.p10.m$`Weight`), rep(0, length(we.m1))))
+colnames(start) <- c("Samples","Weight", "Detection rate")
+wp10.df <- rbind(w.p10.m, start)
+
+w.10 <- ggplot(wp10.df, aes(x = Samples, y = `Detection rate`, color = as.factor(Weight))) +geom_line() + ggtitle("10cm error") + theme_bw() + theme(legend.position = "none") +xlab("Sample size") + ylab("Proportion") 
+
+grid.arrange(w.0, w.2, w.5,w.10, wtLegend, ncol = 3, nrow =2, layout_matrix= cbind(c(1, 2), c(3, 4), c(5, 5)), widths = c(2.5, 2.5, 0.8))
+
+```
+
+#Illustrative figure for mean detection 
+
+```{r}
+set.seed(124)
+means1 <- c(40, 10)
+means2 <- c(40, 15)
+means3 <- c(40, 20)
+means4 <- c(40, 25)
+means5 <- c(40, 30)
+means6 <- c(40, 35)
+sds <- c(7, 7)
+
+ind <- sample(1:2, 1000, replace = T, prob = c(0.5, 0.5))
+
+changeM.df <- data.frame(cbind(Case1 = rnorm(1000, mean = means1[ind], sd =sds[ind]),
+                            Case2 = rnorm(1000, mean = means2[ind], sd =sds[ind]),
+                            Case3 = rnorm(1000, mean = means3[ind], sd =sds[ind]),
+                            Case4 = rnorm(1000, mean = means4[ind], sd =sds[ind]),
+                            Case5 = rnorm(1000, mean = means5[ind], sd =sds[ind]),
+                            Case6 = rnorm(1000, mean = means6[ind], sd=sds[ind])))
+p0 <-ggplot(changeM.df) + geom_density( aes(x =Case1), color="darkblue", fill="lightblue") + ylim(c(0, 0.06))  + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ") + xlab("Case0: Reference Case")
+p1 <- ggplot(changeM.df) + geom_density( aes(x =Case1), color="darkblue", fill="lightblue") + geom_density(aes(x = Case2), color = "darkblue", fill= "pink", alpha = 0.4) + ylim(c(0, 0.06))  + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab("p(x)") + xlab("Case1: 5cm change in mean 1")
+p2 <- ggplot(changeM.df) + geom_density(aes(x = Case1), color="darkblue", fill="lightblue") + geom_density(aes(x = Case3), color = "darkblue", fill= "pink", alpha = 0.4) + ylim(c(0, 0.06))  + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ") + xlab("Case2: 10cm change in mean 1")
+p3 <- ggplot(changeM.df) + geom_density(aes(x = Case1), color="darkblue", fill="lightblue")  + geom_density(aes(x = Case4), color = "darkblue", fill= "pink", alpha = 0.4) + ylim(c(0, 0.06))  + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ") + xlab("Case3: 15cm change in mean 1")
+p4 <- ggplot(changeM.df) + geom_density(aes(x = Case1), color="darkblue", fill="lightblue")  + geom_density(aes(x = Case5), color = "darkblue", fill= "pink", alpha = 0.4) + ylim(c(0, 0.06))  + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ") + xlab("Case4: 20cm change in mean 1")
+p5 <- ggplot(changeM.df) + geom_density(aes(x = Case1), color="darkblue", fill="lightblue")  + geom_density(aes(x = Case6), color = "darkblue", fill= "pink", alpha = 0.4) + ylim(c(0, 0.06))  + theme(axis.text.y  = element_blank(), axis.ticks = element_blank()) + ylab(" ") + xlab("Case5: 25cm change in mean 1")
+# p6 <- ggplot(changeM.df, aes(x = Case6)) + geom_density(color="darkblue", fill="lightblue")
+
+grid.arrange(p0, p1, p2, p3, p4, p5, ncol = 2, nrow = 3, layout_matrix = cbind(c(1, 2, 3), c(4, 5, 6)))
+
+
+```
+
+
+#Change in mean detection
+```{r}
+
+niter = 500
+n.samples <- c(10, seq(25, 250, by = 25))
+m1 <- 15
+m2 <- 40
+sd1 <- 7
+sd2 <- 7
+we.m1 <- 0.5
+we.m2 <- 0.5
+
+changeBy <- c(1, 2, 5, 10)
+
+changeError <- c(2, 5)
+
+changeData <- array(NA, dim = c(length(changeError), length(n.samples), length(changeBy), 500, 4))
+
+# changeNA <- array(NA, dim = c(length(smp.error), length(n.samples), length(changem1), 2))
+i =1; j = 1; k = 1;
+count = 0
+pb <- txtProgressBar(max =100)
+
+for(i in 1:length(changeError)){
+  
+  # print(changeError[i])
+
+  
+  for(j in 1:length(n.samples)){
+    
+    # print(n.samples[j])
+
+    for(k in 1:length(changeBy)){
+      
+      # print(changeBy[k])
+      
+      tmp <- changeMean(nsamples = n.samples[j], error = changeError[i], m1 = m1, m2 =  m2, sd1 = sd1, sd2 = sd2, w1 = we.m1, w2 = we.m2, changeBy = changeBy[k], niter = niter)
+    
+    changeData[i, j, k, , 1] <- tmp[,1]
+    changeData[i, j, k, , 2] <- tmp[,2]
+    changeData[i, j, k, , 3] <- tmp[,3]
+    changeData[i, j, k, , 4] <- tmp[,4]
+    
+    count <- count + 1
+    setTxtProgressBar(pb,(count/(length(smp.error)*length(n.samples)*length(changeBy)))*100)
+      
+      }
+  }
+}
+
+```
+
+
+#Figures for change in mean
+
+```{r}
+
+#for 2cm error
+changeE2 <- changeData[1, , , , ]
+
+
+#function for calculating confidence intervals 
+
+
+CIfn <- function(data){
+  
+ mean <- mean(data, na.rm = T)
+ sd <- sd(data, na.rm = T )
+ n <- length(data)
+ e <- qnorm(0.975)*sd/sqrt(n)
+ 
+ lowCI <- mean - e
+ highCI <- mean + e
+ 
+ CI <- as.data.frame(cbind(mean, sd, lowCI, highCI))
+ colnames(CI) <- c("Mean", "SD", "LowCI", "HighCI")
+ 
+ return(CI)
+  
+}
+
+# 1 cm change, 2cm error
+colData <- list()
+for(i in 1:length(n.samples)){
+
+tmp <- apply(changeE2[i, 1, , ], 2, CIfn)
+tmp2 <- do.call(rbind, tmp)
+rownames(tmp2) <- c("D1M1", "D1M2", "D2M1", "D2M2")
+colData[[i]] <- tmp2
+
+}
+
+cD0102 <- do.call(rbind, colData)
+cD0102$Label <- rep( c("D1M1", "D1M2", "D2M1", "D2M2"), length(n.samples)) 
+rownames(cD0102) <- NULL
+cD0102$Samples <- rep(n.samples, each = 4)
+
+cD0102reFormat <- cD0102[which( cD0102$Label != "D1M2"),]
+
+plot0102 <- ggplot(cD0102reFormat) + geom_point( aes(x = as.factor(Samples), y = Mean, color = Label)) + geom_errorbar( aes(x = as.factor(Samples), ymax = `HighCI`, ymin = `LowCI`, color = Label)) +geom_hline(yintercept =c(15), color = "#00AFBB", linetype = 2) + geom_hline(yintercept= 16, color = "#E7B800", linetype = 2) + geom_hline(yintercept = 40, color = "#FC4E07", linetype = 2) + scale_y_continuous(breaks = seq(0, 50, 10)) +scale_color_manual(values=c("#00AFBB", "#E7B800", "#FC4E07"), name = " ", labels = c("Mean 1", "Changed mean", "Mean2") ) + theme_bw() + xlab("Sample size") + ylab("Mean (cm)") 
+
+cdLegend <- get_legend(plot0102)
+
+plot0102 <- ggplot(cD0102reFormat) + geom_point( aes(x = as.factor(Samples), y = Mean, color = Label)) + geom_errorbar( aes(x = as.factor(Samples), ymax = `HighCI`, ymin = `LowCI`, color = Label)) +geom_hline(yintercept =c(15), color = "#00AFBB", linetype = 2) + geom_hline(yintercept= 16, color = "#E7B800", linetype = 2) + geom_hline(yintercept = 40, color = "#FC4E07", linetype = 2) + scale_y_continuous(breaks = seq(0, 50, 10)) +scale_color_manual(values=c("#00AFBB", "#E7B800", "#FC4E07"), name = " ", labels = c("Mean 1", "Changed mean", "Mean2") ) + theme_bw() + xlab("Sample size") + ylab("Mean (cm)")  + theme(legend.position= "none") + labs(tag = "A")
+
+#2 cm change, 2cm error
+
+colData <- list()
+for(i in 1:length(n.samples)){
+
+tmp <- apply(changeE2[i, 2, , ], 2, CIfn)
+tmp2 <- do.call(rbind, tmp)
+rownames(tmp2) <- c("D1M1", "D1M2", "D2M1", "D2M2")
+colData[[i]] <- tmp2
+
+}
+
+cD0202 <- do.call(rbind, colData)
+cD0202$Label <- rep( c("D1M1", "D1M2", "D2M1", "D2M2"), length(n.samples)) 
+rownames(cD0202) <- NULL
+cD0202$Samples <- rep(n.samples, each = 4)
+
+cD0202reFormat <- cD0202[which( cD0202$Label != "D1M2"),]
+
+
+plot0202 <- ggplot(cD0202reFormat) + geom_point( aes(x = as.factor(Samples), y = Mean, color = Label)) + geom_errorbar( aes(x = as.factor(Samples), ymax = `HighCI`, ymin = `LowCI`, color = Label)) +geom_hline(yintercept =c(15), color = "#00AFBB", linetype = 2) + geom_hline(yintercept= 17, color = "#E7B800", linetype = 2) + geom_hline(yintercept = 40, color = "#FC4E07", linetype = 2) + scale_y_continuous(breaks = seq(0, 50, 10)) +scale_color_manual(values=c("#00AFBB", "#E7B800", "#FC4E07"), name = " ", labels = c("Mean 1", "Changed mean", "Mean2") ) + theme_bw() + xlab("Sample size") + ylab("Mean (cm)")  + theme(legend.position= "none")  + labs(tag = "B")
+
+
+#5 cm change, 2cm error
+
+colData <- list()
+for(i in 1:length(n.samples)){
+
+tmp <- apply(changeE2[i, 3, , ], 2, CIfn)
+tmp2 <- do.call(rbind, tmp)
+rownames(tmp2) <- c("D1M1", "D1M2", "D2M1", "D2M2")
+colData[[i]] <- tmp2
+
+}
+
+cD0502 <- do.call(rbind, colData)
+cD0502$Label <- rep( c("D1M1", "D1M2", "D2M1", "D2M2"), length(n.samples)) 
+rownames(cD0502) <- NULL
+cD0502$Samples <- rep(n.samples, each = 4)
+
+cD0502reFormat <- cD0502[which( cD0502$Label != "D1M2"),]
+
+
+plot0502 <- ggplot(cD0502reFormat) + geom_point( aes(x = as.factor(Samples), y = Mean, color = Label)) + geom_errorbar( aes(x = as.factor(Samples), ymax = `HighCI`, ymin = `LowCI`, color = Label)) +geom_hline(yintercept =c(15), color = "#00AFBB", linetype = 2) + geom_hline(yintercept= 20, color = "#E7B800", linetype = 2) + geom_hline(yintercept = 40, color = "#FC4E07", linetype = 2) + scale_y_continuous(breaks = seq(0, 50, 10)) +scale_color_manual(values=c("#00AFBB", "#E7B800", "#FC4E07"), name = " ", labels = c("Mean 1", "Changed mean", "Mean2") ) + theme_bw() + xlab("Sample size") + ylab("Mean (cm)")  + theme(legend.position= "none")  + labs(tag = "C")
+
+#10 cm change, 2cm error
+
+colData <- list()
+for(i in 1:length(n.samples)){
+
+tmp <- apply(changeE2[i, 4, , ], 2, CIfn)
+tmp2 <- do.call(rbind, tmp)
+rownames(tmp2) <- c("D1M1", "D1M2", "D2M1", "D2M2")
+colData[[i]] <- tmp2
+
+}
+
+cD1002 <- do.call(rbind, colData)
+cD1002$Label <- rep( c("D1M1", "D1M2", "D2M1", "D2M2"), length(n.samples)) 
+rownames(cD1002) <- NULL
+cD1002$Samples <- rep(n.samples, each = 4)
+
+cD1002reFormat <- cD1002[which( cD1002$Label != "D1M2"),]
+
+
+plot1002 <- ggplot(cD1002reFormat) + geom_point( aes(x = as.factor(Samples), y = Mean, color = Label)) + geom_errorbar( aes(x = as.factor(Samples), ymax = `HighCI`, ymin = `LowCI`, color = Label)) +geom_hline(yintercept =c(15), color = "#00AFBB", linetype = 2) + geom_hline(yintercept= 25, color = "#E7B800", linetype = 2) + geom_hline(yintercept = 40, color = "#FC4E07", linetype = 2) + scale_y_continuous(breaks = seq(0, 50, 10)) +scale_color_manual(values=c("#00AFBB", "#E7B800", "#FC4E07"), name = " ", labels = c("Mean 1", "Changed mean", "Mean2") ) + theme_bw() + xlab("Sample size") + ylab("Mean (cm)")  + theme(legend.position= "none") + labs(tag = "D")
+
+
+grid.arrange(plot0102, plot0202, plot0502, plot1002, cdLegend, ncol = 3, nrow = 2, layout_matrix =cbind(c(1, 2), c(3, 4), c(5, 5)), widths = c(2, 2, 0.8))
+```
+
+#Figures for change in mean detection part 2
+
+
+```{r}
+
+#for 5cm error
+changeE5 <- changeData[2, , , , ]
+
+
+#function for calculating confidence intervals 
+
+
+CIfn <- function(data){
+  
+ mean <- mean(data, na.rm = T)
+ sd <- sd(data, na.rm = T )
+ n <- length(data)
+ e <- qnorm(0.975)*sd/sqrt(n)
+ 
+ lowCI <- mean - e
+ highCI <- mean + e
+ 
+ CI <- as.data.frame(cbind(mean, sd, lowCI, highCI))
+ colnames(CI) <- c("Mean", "SD", "LowCI", "HighCI")
+ 
+ return(CI)
+  
+}
+
+# 1 cm change, 5cm error
+colData <- list()
+for(i in 1:length(n.samples)){
+
+tmp <- apply(changeE5[i, 1, , ], 2, CIfn)
+tmp2 <- do.call(rbind, tmp)
+rownames(tmp2) <- c("D1M1", "D1M2", "D2M1", "D2M2")
+colData[[i]] <- tmp2
+
+}
+
+cD0105 <- do.call(rbind, colData)
+cD0105$Label <- rep( c("D1M1", "D1M2", "D2M1", "D2M2"), length(n.samples)) 
+rownames(cD0105) <- NULL
+cD0105$Samples <- rep(n.samples, each = 4)
+
+cD0105reFormat <- cD0105[which( cD0105$Label != "D1M2"),]
+
+plot0105 <- ggplot(cD0105reFormat) + geom_point( aes(x = as.factor(Samples), y = Mean, color = Label)) + geom_errorbar( aes(x = as.factor(Samples), ymax = `HighCI`, ymin = `LowCI`, color = Label)) +geom_hline(yintercept =c(15), color = "#00AFBB", linetype = 2) + geom_hline(yintercept= 16, color = "#E7B800", linetype = 2) + geom_hline(yintercept = 40, color = "#FC4E07", linetype = 2) + scale_y_continuous(breaks = seq(0, 50, 10)) +scale_color_manual(values=c("#00AFBB", "#E7B800", "#FC4E07"), name = " ", labels = c("Mean 1", "Changed mean", "Mean2") ) + theme_bw() + xlab("Sample size") + ylab("Mean (cm)") 
+
+cdLegend <- get_legend(plot0105)
+
+plot0105 <- ggplot(cD0105reFormat) + geom_point( aes(x = as.factor(Samples), y = Mean, color = Label)) + geom_errorbar( aes(x = as.factor(Samples), ymax = `HighCI`, ymin = `LowCI`, color = Label)) +geom_hline(yintercept =c(15), color = "#00AFBB", linetype = 2) + geom_hline(yintercept= 16, color = "#E7B800", linetype = 2) + geom_hline(yintercept = 40, color = "#FC4E07", linetype = 2) + scale_y_continuous(breaks = seq(0, 50, 10)) +scale_color_manual(values=c("#00AFBB", "#E7B800", "#FC4E07"), name = " ", labels = c("Mean 1", "Changed mean", "Mean2") ) + theme_bw() + xlab("Sample size") + ylab("Mean (cm)")  + theme(legend.position= "none") + labs(tag = "A")
+
+#2 cm change, 5cm error
+
+colData <- list()
+for(i in 1:length(n.samples)){
+
+tmp <- apply(changeE5[i, 2, , ], 2, CIfn)
+tmp2 <- do.call(rbind, tmp)
+rownames(tmp2) <- c("D1M1", "D1M2", "D2M1", "D2M2")
+colData[[i]] <- tmp2
+
+}
+
+cD0205 <- do.call(rbind, colData)
+cD0205$Label <- rep( c("D1M1", "D1M2", "D2M1", "D2M2"), length(n.samples)) 
+rownames(cD0205) <- NULL
+cD0205$Samples <- rep(n.samples, each = 4)
+
+cD0205reFormat <- cD0205[which( cD0205$Label != "D1M2"),]
+
+
+plot0205 <- ggplot(cD0205reFormat) + geom_point( aes(x = as.factor(Samples), y = Mean, color = Label)) + geom_errorbar( aes(x = as.factor(Samples), ymax = `HighCI`, ymin = `LowCI`, color = Label)) +geom_hline(yintercept =c(15), color = "#00AFBB", linetype = 2) + geom_hline(yintercept= 17, color = "#E7B800", linetype = 2) + geom_hline(yintercept = 40, color = "#FC4E07", linetype = 2) + scale_y_continuous(breaks = seq(0, 50, 10)) +scale_color_manual(values=c("#00AFBB", "#E7B800", "#FC4E07"), name = " ", labels = c("Mean 1", "Changed mean", "Mean2") ) + theme_bw() + xlab("Sample size") + ylab("Mean (cm)")  + theme(legend.position= "none")  + labs(tag = "B")
+
+
+#5 cm change, 5cm error
+
+colData <- list()
+for(i in 1:length(n.samples)){
+
+tmp <- apply(changeE5[i, 3, , ], 2, CIfn)
+tmp2 <- do.call(rbind, tmp)
+rownames(tmp2) <- c("D1M1", "D1M2", "D2M1", "D2M2")
+colData[[i]] <- tmp2
+
+}
+
+cD0505 <- do.call(rbind, colData)
+cD0505$Label <- rep( c("D1M1", "D1M2", "D2M1", "D2M2"), length(n.samples)) 
+rownames(cD0505) <- NULL
+cD0505$Samples <- rep(n.samples, each = 4)
+
+cD0505reFormat <- cD0505[which( cD0505$Label != "D1M2"),]
+
+
+plot0505 <- ggplot(cD0505reFormat) + geom_point( aes(x = as.factor(Samples), y = Mean, color = Label)) + geom_errorbar( aes(x = as.factor(Samples), ymax = `HighCI`, ymin = `LowCI`, color = Label)) +geom_hline(yintercept =c(15), color = "#00AFBB", linetype = 2) + geom_hline(yintercept= 20, color = "#E7B800", linetype = 2) + geom_hline(yintercept = 40, color = "#FC4E07", linetype = 2) + scale_y_continuous(breaks = seq(0, 50, 10)) +scale_color_manual(values=c("#00AFBB", "#E7B800", "#FC4E07"), name = " ", labels = c("Mean 1", "Changed mean", "Mean2") ) + theme_bw() + xlab("Sample size") + ylab("Mean (cm)")  + theme(legend.position= "none")  + labs(tag = "C")
+
+#10 cm change, 5cm error
+
+colData <- list()
+for(i in 1:length(n.samples)){
+
+tmp <- apply(changeE5[i, 4, , ], 2, CIfn)
+tmp2 <- do.call(rbind, tmp)
+rownames(tmp2) <- c("D1M1", "D1M2", "D2M1", "D2M2")
+colData[[i]] <- tmp2
+
+}
+
+cD1005 <- do.call(rbind, colData)
+cD1005$Label <- rep( c("D1M1", "D1M2", "D2M1", "D2M2"), length(n.samples)) 
+rownames(cD1005) <- NULL
+cD1005$Samples <- rep(n.samples, each = 4)
+
+cD1005reFormat <- cD1005[which( cD1002$Label != "D1M2"),]
+
+
+plot1005 <- ggplot(cD1005reFormat) + geom_point( aes(x = as.factor(Samples), y = Mean, color = Label)) + geom_errorbar( aes(x = as.factor(Samples), ymax = `HighCI`, ymin = `LowCI`, color = Label)) +geom_hline(yintercept =c(15), color = "#00AFBB", linetype = 2) + geom_hline(yintercept= 25, color = "#E7B800", linetype = 2) + geom_hline(yintercept = 40, color = "#FC4E07", linetype = 2) + scale_y_continuous(breaks = seq(0, 50, 10)) +scale_color_manual(values=c("#00AFBB", "#E7B800", "#FC4E07"), name = " ", labels = c("Mean 1", "Changed mean", "Mean2") ) + theme_bw() + xlab("Sample size") + ylab("Mean (cm)")  + theme(legend.position= "none") + labs(tag = "D")
+
+
+grid.arrange(plot0105, plot0205, plot0505, plot1005, cdLegend, ncol = 3, nrow = 2, layout_matrix =cbind(c(1, 2), c(3, 4), c(5, 5)), widths = c(2, 2, 0.8))
+```
+
